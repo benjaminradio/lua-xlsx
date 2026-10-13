@@ -20,30 +20,35 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        lua: ["5.1", "5.2", "5.3", "5.4", "5.5"]
-        target:
-          - { os_name: linux,   arch: x64, runner: ubuntu-22.04,   triple: x86_64-unknown-linux-gnu, lib: libxlsx.so, ext: so }
-          - { os_name: windows, arch: x64, runner: windows-latest, triple: x86_64-pc-windows-msvc,    lib: xlsx.dll,    ext: dll }
-          - { os_name: windows, arch: x86, runner: windows-latest, triple: i686-pc-windows-msvc,      lib: xlsx.dll,    ext: dll }
         include:
-          - { lua: "5.1", feature: lua51 }
-          - { lua: "5.2", feature: lua52 }
-          - { lua: "5.3", feature: lua53 }
-          - { lua: "5.4", feature: lua54 }
-          - { lua: "5.5", feature: lua55 }
+          - { lua: "5.1", feature: lua51, os_name: linux, arch: x64, runner: ubuntu-22.04, triple: x86_64-unknown-linux-gnu, lib: libxlsx.so, ext: so }
+          - { lua: "5.1", feature: lua51, os_name: windows, arch: x64, runner: windows-latest, triple: x86_64-pc-windows-msvc, lib: xlsx.dll, ext: dll }
+          - { lua: "5.1", feature: lua51, os_name: windows, arch: x86, runner: windows-latest, triple: i686-pc-windows-msvc, lib: xlsx.dll, ext: dll }
+          - { lua: "5.2", feature: lua52, os_name: linux, arch: x64, runner: ubuntu-22.04, triple: x86_64-unknown-linux-gnu, lib: libxlsx.so, ext: so }
+          - { lua: "5.2", feature: lua52, os_name: windows, arch: x64, runner: windows-latest, triple: x86_64-pc-windows-msvc, lib: xlsx.dll, ext: dll }
+          - { lua: "5.2", feature: lua52, os_name: windows, arch: x86, runner: windows-latest, triple: i686-pc-windows-msvc, lib: xlsx.dll, ext: dll }
+          - { lua: "5.3", feature: lua53, os_name: linux, arch: x64, runner: ubuntu-22.04, triple: x86_64-unknown-linux-gnu, lib: libxlsx.so, ext: so }
+          - { lua: "5.3", feature: lua53, os_name: windows, arch: x64, runner: windows-latest, triple: x86_64-pc-windows-msvc, lib: xlsx.dll, ext: dll }
+          - { lua: "5.3", feature: lua53, os_name: windows, arch: x86, runner: windows-latest, triple: i686-pc-windows-msvc, lib: xlsx.dll, ext: dll }
+          - { lua: "5.4", feature: lua54, os_name: linux, arch: x64, runner: ubuntu-22.04, triple: x86_64-unknown-linux-gnu, lib: libxlsx.so, ext: so }
+          - { lua: "5.4", feature: lua54, os_name: windows, arch: x64, runner: windows-latest, triple: x86_64-pc-windows-msvc, lib: xlsx.dll, ext: dll }
+          - { lua: "5.4", feature: lua54, os_name: windows, arch: x86, runner: windows-latest, triple: i686-pc-windows-msvc, lib: xlsx.dll, ext: dll }
+          - { lua: "5.5", feature: lua55, os_name: linux, arch: x64, runner: ubuntu-22.04, triple: x86_64-unknown-linux-gnu, lib: libxlsx.so, ext: so }
+          - { lua: "5.5", feature: lua55, os_name: windows, arch: x64, runner: windows-latest, triple: x86_64-pc-windows-msvc, lib: xlsx.dll, ext: dll }
+          - { lua: "5.5", feature: lua55, os_name: windows, arch: x86, runner: windows-latest, triple: i686-pc-windows-msvc, lib: xlsx.dll, ext: dll }
     env:
-      OS_NAME: ${{ matrix.target.os_name }}
-      ARCH: ${{ matrix.target.arch }}
+      OS_NAME: ${{ matrix.os_name }}
+      ARCH: ${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target.triple }}
+          targets: ${{ matrix.triple }}
 
       - uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ matrix.target.triple }}-${{ matrix.feature }}
+          key: ${{ matrix.triple }}-${{ matrix.feature }}
 
       # On Windows the module links against luaXY.dll by name (raw-dylib), so
       # no Lua import library is needed at build time.
@@ -51,7 +56,7 @@ jobs:
         shell: bash
         run: >
           cargo build --release
-          --target ${{ matrix.target.triple }}
+          --target ${{ matrix.triple }}
           --no-default-features --features ${{ matrix.feature }}
 
       - name: Package
@@ -59,7 +64,7 @@ jobs:
         run: |
           name="lua-xlsx-lua${{ matrix.lua }}-${OS_NAME}-${ARCH}"
           mkdir -p "dist/$name"
-          cp "target/${{ matrix.target.triple }}/release/${{ matrix.target.lib }}" "dist/$name/xlsx.${{ matrix.target.ext }}"
+          cp "target/${{ matrix.triple }}/release/${{ matrix.lib }}" "dist/$name/xlsx.${{ matrix.ext }}"
           cp README.md LICENSE "dist/$name/"
           cd dist
           if [ "$OS_NAME" = windows ]; then
@@ -72,16 +77,16 @@ jobs:
 
       # Smoke test the Linux artifacts with a matching packaged interpreter (5.3 and 5.4).
       - name: Smoke test (Linux)
-        if: matrix.target.os_name == 'linux' && (matrix.lua == '5.3' || matrix.lua == '5.4')
+        if: matrix.os_name == 'linux' && (matrix.lua == '5.3' || matrix.lua == '5.4')
         shell: bash
         run: |
           sudo apt-get update && sudo apt-get install -y lua${{ matrix.lua }}
           lua${{ matrix.lua }} tests/test.lua \
-            "target/${{ matrix.target.triple }}/release/lib?.so"
+            "target/${{ matrix.triple }}/release/lib?.so"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: lua-xlsx-lua${{ matrix.lua }}-${{ matrix.target.os_name }}-${{ matrix.target.arch }}
+          name: lua-xlsx-lua${{ matrix.lua }}-${{ matrix.os_name }}-${{ matrix.arch }}
           path: dist/*
           if-no-files-found: error
 
