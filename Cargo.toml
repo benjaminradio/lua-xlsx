@@ -1,0 +1,31 @@
+[package]
+name = "xlsx"
+version = "0.1.0"
+edition = "2021"
+description = "Read Excel (.xlsx) workbooks from Lua / Lus, backed by calamine"
+license = "MIT"
+repository = "https://github.com/benjaminradio/lua-xlsx"
+
+[lib]
+name = "xlsx"
+crate-type = ["cdylib"]
+
+[features]
+# Select the Lua ABI to target. Exactly one must be enabled.
+default = ["lua54"]
+lua51 = ["mlua/lua51"]
+lua52 = ["mlua/lua52"]
+lua53 = ["mlua/lua53"]
+lua54 = ["mlua/lua54"]
+lua55 = ["mlua/lua55"]
+
+[dependencies]
+calamine = "0.36.1"
+mlua = { version = "0.12.2", features = ["module"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

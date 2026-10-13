@@ -1,0 +1,105 @@
+name: Release
+
+# Push a tag such as v0.1.0 to build and publish a GitHub release.
+# Run manually (workflow_dispatch) to build the artifacts without publishing.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: ${{ matrix.os_name }}-${{ matrix.arch }} / Lua ${{ matrix.lua }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        lua: ["5.1", "5.2", "5.3", "5.4", "5.5"]
+        target:
+          - { os_name: linux,   arch: x64, runner: ubuntu-22.04,   triple: x86_64-unknown-linux-gnu, lib: libxlsx.so, ext: so }
+          - { os_name: windows, arch: x64, runner: windows-latest, triple: x86_64-pc-windows-msvc,    lib: xlsx.dll,    ext: dll }
+          - { os_name: windows, arch: x86, runner: windows-latest, triple: i686-pc-windows-msvc,      lib: xlsx.dll,    ext: dll }
+        include:
+          - { lua: "5.1", feature: lua51 }
+          - { lua: "5.2", feature: lua52 }
+          - { lua: "5.3", feature: lua53 }
+          - { lua: "5.4", feature: lua54 }
+          - { lua: "5.5", feature: lua55 }
+    env:
+      OS_NAME: ${{ matrix.target.os_name }}
+      ARCH: ${{ matrix.target.arch }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target.triple }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target.triple }}-${{ matrix.feature }}
+
+      # On Windows the module links against luaXY.dll by name (raw-dylib), so
+      # no Lua import library is needed at build time.
+      - name: Build
+        shell: bash
+        run: >
+          cargo build --release
+          --target ${{ matrix.target.triple }}
+          --no-default-features --features ${{ matrix.feature }}
+
+      - name: Package
+        shell: bash
+        run: |
+          name="lua-xlsx-lua${{ matrix.lua }}-${OS_NAME}-${ARCH}"
+          mkdir -p "dist/$name"
+          cp "target/${{ matrix.target.triple }}/release/${{ matrix.target.lib }}" "dist/$name/xlsx.${{ matrix.target.ext }}"
+          cp README.md LICENSE "dist/$name/"
+          cd dist
+          if [ "$OS_NAME" = windows ]; then
+            7z a "$name.zip" "$name" > /dev/null
+          else
+            tar czf "$name.tar.gz" "$name"
+          fi
+          rm -rf "$name"
+          ls -la
+
+      # Smoke test the Linux artifacts with a matching packaged interpreter (5.3 and 5.4).
+      - name: Smoke test (Linux)
+        if: matrix.target.os_name == 'linux' && (matrix.lua == '5.3' || matrix.lua == '5.4')
+        shell: bash
+        run: |
+          sudo apt-get update && sudo apt-get install -y lua${{ matrix.lua }}
+          lua${{ matrix.lua }} tests/test.lua \
+            "target/${{ matrix.target.triple }}/release/lib?.so"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lua-xlsx-lua${{ matrix.lua }}-${{ matrix.target.os_name }}-${{ matrix.target.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums
+        run: cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
